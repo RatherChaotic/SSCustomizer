@@ -17,8 +17,8 @@
 
   <PropertyGroup>
     <!--These properties will control the generated PluginInfo. Version is also used by various parts of the build system.-->
-    <BepInExPluginGuid>hkssmods</BepInExPluginGuid>
-    <BepInExPluginName>HKSSMods</BepInExPluginName>
+    <BepInExPluginGuid>sscustomizer</BepInExPluginGuid>
+    <BepInExPluginName>SilkSongCustomizer</BepInExPluginName>
     <Version>0.1.0</Version>
   </PropertyGroup>
 
