@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -7,14 +6,14 @@ using HarmonyLib;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-namespace SSCustomizer;
+namespace Customizer;
 
 [BepInPlugin(PluginInfo.PLUGIN_GUID, PluginInfo.PLUGIN_NAME, PluginInfo.PLUGIN_VERSION)]
-public class SSCustomizer : BaseUnityPlugin
+public class Customizer : BaseUnityPlugin
 {
-    private static SSCustomizer _instance = null!;
+    private static Customizer _instance = null!;
     private static readonly string ModDir = Path.Combine(Application.dataPath, "Mods", "Customizer");
-    private static readonly List<tk2dSpriteCollectionData> LoadedCollectionsList = new List<tk2dSpriteCollectionData>();
+    private static readonly List<tk2dSpriteCollectionData> LoadedCollectionsList = new();
     
 
     private static void UpdateLoadedAssets()
@@ -33,7 +32,7 @@ public class SSCustomizer : BaseUnityPlugin
 
         foreach (var output in Directory.GetDirectories(ModDir))
         {
-            var infoPath = Path.Combine(output, "info.json");
+            var infoPath = Path.Combine(output, "active.txt");
             if (!File.Exists(infoPath)) continue;
 
             foreach (var dir in Directory.GetDirectories(output))
