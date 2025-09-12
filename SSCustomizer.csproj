@@ -13,6 +13,7 @@
     <RestoreAdditionalProjectSources>
         https://nuget.bepinex.dev/v3/index.json
     </RestoreAdditionalProjectSources>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -37,7 +38,7 @@
           <Binaries Include="$(TargetDir)/$(TargetName).pdb"/>
       </ItemGroup>
 
-      <Copy SourceFiles="@(Binaries)" DestinationFolder="$(SilksongFolder)/BepInEx/plugins/$(TargetName)" />
+      <Copy SourceFiles="@(Binaries)" DestinationFolder="C:\Users\Occat\AppData\Roaming\com.kesomannen.gale\hollow-knight-silksong\profiles\Dev\BepInEx\plugins/$(TargetName)" />
 
       <PropertyGroup>
           <ExportFolder>bin/Publish</ExportFolder>

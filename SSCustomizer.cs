@@ -1,6 +1,8 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using BepInEx;
 using HarmonyLib;
 using UnityEngine;
@@ -12,9 +14,7 @@ public class SSCustomizer : BaseUnityPlugin
 {
     private static SSCustomizer _instance = null!;
     private static readonly string ModDir = Path.Combine(Application.dataPath, "Mods", "Customizer");
-    internal static readonly string[] ValidTextures = ["atlas0.png", "atlas1.png", "atlas2.png", "atlas3.png"];
-    internal static readonly string[] ValidCrests = ["warrior", "scythe", "whip", "dagger", "shaman", "drill_lance"];
-    internal static tk2dSpriteCollectionData[] CrestCollection = [];
+    private static readonly List<tk2dSpriteCollectionData> LoadedCollectionsList = new List<tk2dSpriteCollectionData>();
     
     [HarmonyPatch(typeof(HeroController), "Start")]
     class HeroControllerPrePatch
@@ -22,25 +22,10 @@ public class SSCustomizer : BaseUnityPlugin
         private static void Prefix(HeroController __instance)
         {
             var gameObject = __instance.gameObject;
+            _instance.Logger.LogInfo("HeroController Start Detected");
             var sprite = gameObject.GetComponent(typeof(tk2dSprite)) as tk2dSprite;
-            var crestObj = GameObject.Find("Hornet CrestWeapon Warrior Cln");
-            if (crestObj != null)
-            {
-                _instance.Logger.LogInfo("crestobj found");
-                var crestData = crestObj.GetComponent<tk2dSpriteCollectionData>();
-                if (crestData != null)
-                {
-                    ((IList)CrestCollection).Add(crestData);
-                    _instance.Logger.LogInfo(CrestCollection[0].name);
-                }
-                else
-                {
-                    _instance.Logger.LogWarning("tk2dSpriteCollectionData not found on Hornet CrestWeapon Warrior.");
-                }
-            }
-            _instance.Logger.LogInfo(crestObj == null ? "crestobj is null" : "crestobj is not null");
-            //_instance.Logger.LogInfo(CrestCollection[0].name);
-            if (sprite != null) GetTexturePacks(sprite.Collection);
+            var collections = Resources.FindObjectsOfTypeAll<tk2dSpriteCollectionData>();
+            UpdateLoadedAssets();
         }
     }
 
@@ -74,29 +59,39 @@ public class SSCustomizer : BaseUnityPlugin
             }
         }
     }
-    private static void GetTexturePacks(tk2dSpriteCollectionData spriteCollectionData)
+
+    private static void UpdateLoadedAssets()
+    {
+        LoadedCollectionsList.Clear();
+        foreach (var collection in Resources.FindObjectsOfTypeAll<tk2dSpriteCollectionData>())
+        {
+            LoadedCollectionsList.Add(collection);
+        }
+        GetTexturePacks(LoadedCollectionsList);
+    }
+    
+    private static void GetTexturePacks(List<tk2dSpriteCollectionData> collections)
     {
         foreach (var output in Directory.GetDirectories(ModDir))
         {
-            if (File.Exists(output + "/info.json"))
+            if (!File.Exists(output + "/info.json")) continue;
+            foreach (var dir in Directory.GetDirectories(Path.Combine(ModDir, output)))
             {
-                _instance.Logger.LogInfo($"Found texture pack: {Path.Combine(ModDir, output)}");
-                _instance.Logger.LogInfo($"Found texture pack: {Path.Combine(ModDir, output, "crest")}");
-                if (Directory.Exists(Path.Combine(ModDir, output, "crest")))
+                var dirname = dir[(dir.LastIndexOf("\\", StringComparison.Ordinal) + 1)..];
+                if (collections.All(collection => collection.name != dirname)) continue;
                 {
-                    foreach (var file in Directory.GetFiles(Path.Combine(ModDir, output, "crest")))
+                    var collection = collections.Find(collection => collection.name == dirname);
+                    foreach (var atlas in collection.materials)
                     {
-                        if (Array.Exists(ValidCrests, crest => crest == Path.GetFileNameWithoutExtension(file)))
+                        if (!File.Exists(Path.Combine(ModDir, output, dirname, atlas.mainTexture.name + ".png")))
+                            continue;
+                        var pngData = File.ReadAllBytes(Path.Combine(ModDir, output, dirname, atlas.mainTexture.name + ".png"));
+                        var texture = new Texture2D(2, 2);
+                        if (texture.LoadImage(pngData))
                         {
-                            
+                            atlas.mainTexture = texture;
                         }
                     }
-                }
-                foreach (var file in (Directory.GetFiles(Path.Combine(ModDir, output))))
-                {
-                    if (!Array.Exists(ValidTextures, texture => texture == Path.GetFileName(file))) continue;
-                    _instance.Logger.LogInfo($"Found texture: {Path.GetFileNameWithoutExtension(file)[5]}");
-                    UpdateMultiAsset(spriteCollectionData, file, Path.GetFileNameWithoutExtension(file)[5] - '0');
                 }
             }
         }
