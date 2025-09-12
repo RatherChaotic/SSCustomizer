@@ -1,11 +1,11 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using BepInEx;
 using HarmonyLib;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace SSCustomizer;
 
@@ -16,49 +16,6 @@ public class SSCustomizer : BaseUnityPlugin
     private static readonly string ModDir = Path.Combine(Application.dataPath, "Mods", "Customizer");
     private static readonly List<tk2dSpriteCollectionData> LoadedCollectionsList = new List<tk2dSpriteCollectionData>();
     
-    [HarmonyPatch(typeof(HeroController), "Start")]
-    class HeroControllerPrePatch
-    {
-        private static void Prefix(HeroController __instance)
-        {
-            var gameObject = __instance.gameObject;
-            _instance.Logger.LogInfo("HeroController Start Detected");
-            var sprite = gameObject.GetComponent(typeof(tk2dSprite)) as tk2dSprite;
-            var collections = Resources.FindObjectsOfTypeAll<tk2dSpriteCollectionData>();
-            UpdateLoadedAssets();
-        }
-    }
-
-    private static void UpdateAsset(tk2dSpriteCollectionData spriteCollectionData, String pngfile)
-    {
-        if (spriteCollectionData != null)
-        {
-            if (File.Exists(pngfile))
-            {
-                byte[] pngData = File.ReadAllBytes(pngfile);
-                Texture2D texture = new Texture2D(2, 2);
-                if (texture.LoadImage(pngData))
-                {
-                    spriteCollectionData.materials[0].mainTexture = texture;
-                }
-            }
-        }
-    }
-    private static void UpdateMultiAsset(tk2dSpriteCollectionData spriteCollectionData, String pngfile, int index)
-    {
-        if (spriteCollectionData != null)
-        {
-            if (File.Exists(pngfile))
-            {
-                byte[] pngData = File.ReadAllBytes(pngfile);
-                Texture2D texture = new Texture2D(2, 2);
-                if (texture.LoadImage(pngData))
-                {
-                    spriteCollectionData.materials[index].mainTexture = texture;
-                }
-            }
-        }
-    }
 
     private static void UpdateLoadedAssets()
     {
@@ -69,32 +26,45 @@ public class SSCustomizer : BaseUnityPlugin
         }
         GetTexturePacks(LoadedCollectionsList);
     }
-    
+
     private static void GetTexturePacks(List<tk2dSpriteCollectionData> collections)
     {
+        var collectionDict = collections.ToDictionary(c => c.name, c => c);
+
         foreach (var output in Directory.GetDirectories(ModDir))
         {
-            if (!File.Exists(output + "/info.json")) continue;
-            foreach (var dir in Directory.GetDirectories(Path.Combine(ModDir, output)))
+            var infoPath = Path.Combine(output, "info.json");
+            if (!File.Exists(infoPath)) continue;
+
+            foreach (var dir in Directory.GetDirectories(output))
             {
-                var dirname = dir[(dir.LastIndexOf("\\", StringComparison.Ordinal) + 1)..];
-                if (collections.All(collection => collection.name != dirname)) continue;
+                var dirname = Path.GetFileName(dir);
+                if (!collectionDict.TryGetValue(dirname, out var collection)) continue;
+
+                foreach (var atlas in collection.materials)
                 {
-                    var collection = collections.Find(collection => collection.name == dirname);
-                    foreach (var atlas in collection.materials)
+                    var texturePath = Path.Combine(dir, atlas.mainTexture.name + ".png");
+                    if (!File.Exists(texturePath)) continue;
+
+                    var pngData = File.ReadAllBytes(texturePath);
+                    var texture = new Texture2D(2, 2);
+                    if (texture.LoadImage(pngData))
                     {
-                        if (!File.Exists(Path.Combine(ModDir, output, dirname, atlas.mainTexture.name + ".png")))
-                            continue;
-                        var pngData = File.ReadAllBytes(Path.Combine(ModDir, output, dirname, atlas.mainTexture.name + ".png"));
-                        var texture = new Texture2D(2, 2);
-                        if (texture.LoadImage(pngData))
-                        {
-                            atlas.mainTexture = texture;
-                        }
+                        atlas.mainTexture = texture;
                     }
                 }
             }
         }
+    }
+
+    private static void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        UpdateLoadedAssets();
+        _instance.Logger.LogInfo($"Loaded scene: {scene.name}");
+    }
+    private void OnDestroy()
+    {
+        SceneManager.sceneLoaded -= OnSceneLoaded;
     }
 
     private void InitializeMod()
@@ -114,5 +84,6 @@ public class SSCustomizer : BaseUnityPlugin
         Logger.LogInfo($"Plugin {PluginInfo.PLUGIN_GUID} has loaded!");
         var harmony = new Harmony(PluginInfo.PLUGIN_GUID);
         harmony.PatchAll();
+        SceneManager.sceneLoaded += OnSceneLoaded;
     }
 }
