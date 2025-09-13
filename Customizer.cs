@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using BepInEx;
+using BepInEx.Configuration;
 using HarmonyLib;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -14,7 +15,10 @@ public class Customizer : BaseUnityPlugin
     private static Customizer _instance = null!;
     private static readonly string ModDir = Path.Combine(Application.dataPath, "Mods", "Customizer");
     private static readonly List<tk2dSpriteCollectionData> LoadedCollectionsList = new();
-    
+    private ConfigEntry<KeyboardShortcut>? _reloadAssetsBind;
+
+
+
 
     private static void UpdateLoadedAssets()
     {
@@ -23,6 +27,7 @@ public class Customizer : BaseUnityPlugin
         {
             LoadedCollectionsList.Add(collection);
         }
+
         GetTexturePacks(LoadedCollectionsList);
     }
 
@@ -56,10 +61,14 @@ public class Customizer : BaseUnityPlugin
         }
     }
 
-    private static void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    private static void InitConfig()
+    {
+        
+    }
+
+private static void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
         UpdateLoadedAssets();
-        _instance.Logger.LogInfo($"Loaded scene: {scene.name}");
     }
     private void OnDestroy()
     {
@@ -75,12 +84,21 @@ public class Customizer : BaseUnityPlugin
 
         
     }
+    
+    private void Update()
+    {
+        if (Input.GetKeyDown(_reloadAssetsBind!.Value.MainKey))
+        {
+            UpdateLoadedAssets();
+        }
+    }
+
 
     private void Awake()
     {
+        _reloadAssetsBind = Config.Bind("Keybinds", "Reload Assets", new KeyboardShortcut(KeyCode.F5), "Reloads all texture packs");
         _instance = this;
         InitializeMod();
-        Logger.LogInfo($"Plugin {PluginInfo.PLUGIN_GUID} has loaded!");
         var harmony = new Harmony(PluginInfo.PLUGIN_GUID);
         harmony.PatchAll();
         SceneManager.sceneLoaded += OnSceneLoaded;
