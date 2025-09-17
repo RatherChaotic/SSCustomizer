@@ -1,11 +1,15 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using BepInEx;
 using BepInEx.Configuration;
 using HarmonyLib;
+using HutongGames.PlayMaker.Actions;
+using TeamCherry.Cinematics;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.Video;
 
 namespace Customizer;
 
@@ -15,11 +19,7 @@ public class Customizer : BaseUnityPlugin
     private static Customizer _instance = null!;
     private static readonly string ModDir = Path.Combine(Application.dataPath, "Mods", "Customizer");
     private static readonly List<tk2dSpriteCollectionData> LoadedCollectionsList = new();
-    private ConfigEntry<KeyboardShortcut>? _reloadAssetsBind;
-
-
-
-
+    
     private static void UpdateLoadedAssets()
     {
         LoadedCollectionsList.Clear();
@@ -27,14 +27,12 @@ public class Customizer : BaseUnityPlugin
         {
             LoadedCollectionsList.Add(collection);
         }
-
         GetTexturePacks(LoadedCollectionsList);
     }
 
     private static void GetTexturePacks(List<tk2dSpriteCollectionData> collections)
     {
         var collectionDict = collections.ToDictionary(c => c.name, c => c);
-
         foreach (var output in Directory.GetDirectories(ModDir))
         {
             var infoPath = Path.Combine(output, "active.txt");
@@ -47,23 +45,18 @@ public class Customizer : BaseUnityPlugin
 
                 foreach (var atlas in collection.materials)
                 {
+                    
                     var texturePath = Path.Combine(dir, atlas.mainTexture.name + ".png");
                     if (!File.Exists(texturePath)) continue;
 
                     var pngData = File.ReadAllBytes(texturePath);
                     var texture = new Texture2D(2, 2);
-                    if (texture.LoadImage(pngData))
-                    {
-                        atlas.mainTexture = texture;
-                    }
+                    if (!texture.LoadImage(pngData)) continue;
+                    texture.name = atlas.mainTexture.name;
+                    atlas.mainTexture = texture;
                 }
             }
         }
-    }
-
-    private static void InitConfig()
-    {
-        
     }
 
 private static void OnSceneLoaded(Scene scene, LoadSceneMode mode)
@@ -85,19 +78,11 @@ private static void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         
     }
     
-    private void Update()
-    {
-        if (Input.GetKeyDown(_reloadAssetsBind!.Value.MainKey))
-        {
-            UpdateLoadedAssets();
-        }
-    }
-
 
     private void Awake()
     {
-        _reloadAssetsBind = Config.Bind("Keybinds", "Reload Assets", new KeyboardShortcut(KeyCode.F5), "Reloads all texture packs");
         _instance = this;
+        //_instance.Logger.LogInfo("Customizer Loaded : DEBUG");
         InitializeMod();
         var harmony = new Harmony(PluginInfo.PLUGIN_GUID);
         harmony.PatchAll();
