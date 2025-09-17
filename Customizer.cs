@@ -18,8 +18,31 @@ public class Customizer : BaseUnityPlugin
 {
     private static Customizer _instance = null!;
     private static readonly string ModDir = Path.Combine(Application.dataPath, "Mods", "Customizer");
-    private static readonly List<tk2dSpriteCollectionData> LoadedCollectionsList = new();
-    
+    private static readonly List<tk2dSpriteCollectionData> LoadedCollectionsList = [];
+
+    [HarmonyPatch(typeof(VideoPlayer), "Play")]
+    private class VideoPlayerPlayPatch
+    {
+        static void Prefix(VideoPlayer __instance)
+        {
+            _instance.Logger.LogInfo(__instance.clip.name);
+            var activePack = GetActiveTexturePack();
+            if (activePack == null) return;
+            var cinemaDir = Path.Combine(activePack, "Cinematics");
+            if (!Directory.Exists(cinemaDir)) return;
+            var files = Directory.GetFiles(cinemaDir)
+                .Select(Path.GetFileNameWithoutExtension)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var clipName = Path.GetFileNameWithoutExtension(__instance.clip.name);
+            if (!files.Contains(clipName)) return;
+            _instance.Logger.LogInfo("Found clip :)");
+            _instance.Logger.LogInfo($"Target Clip at : {Path.Combine(cinemaDir, __instance.clip.name + ".mp4")}");
+            __instance.source = VideoSource.Url;
+            __instance.url = Path.Combine(cinemaDir, __instance.clip.name + ".mp4");
+            _instance.Logger.LogInfo($"Patched VideoPlayer: {__instance.url}");
+        }
+    }
+
     private static void UpdateLoadedAssets()
     {
         LoadedCollectionsList.Clear();
@@ -33,30 +56,62 @@ public class Customizer : BaseUnityPlugin
     private static void GetTexturePacks(List<tk2dSpriteCollectionData> collections)
     {
         var collectionDict = collections.ToDictionary(c => c.name, c => c);
-        foreach (var output in Directory.GetDirectories(ModDir))
+        var activePack = GetActiveTexturePack();
+        if (activePack == null) return;
+        foreach (var dir in Directory.GetDirectories(activePack))
         {
-            var infoPath = Path.Combine(output, "active.txt");
-            if (!File.Exists(infoPath)) continue;
+            var dirname = Path.GetFileName(dir);
+            if (!collectionDict.TryGetValue(dirname, out var collection)) continue;
 
-            foreach (var dir in Directory.GetDirectories(output))
+            foreach (var atlas in collection.materials)
             {
-                var dirname = Path.GetFileName(dir);
-                if (!collectionDict.TryGetValue(dirname, out var collection)) continue;
+                var texturePath = Path.Combine(dir, atlas.mainTexture.name + ".png");
+                if (!File.Exists(texturePath)) continue;
 
-                foreach (var atlas in collection.materials)
-                {
-                    
-                    var texturePath = Path.Combine(dir, atlas.mainTexture.name + ".png");
-                    if (!File.Exists(texturePath)) continue;
-
-                    var pngData = File.ReadAllBytes(texturePath);
-                    var texture = new Texture2D(2, 2);
-                    if (!texture.LoadImage(pngData)) continue;
-                    texture.name = atlas.mainTexture.name;
-                    atlas.mainTexture = texture;
-                }
+                var pngData = File.ReadAllBytes(texturePath);
+                var texture = new Texture2D(2, 2);
+                if (!texture.LoadImage(pngData)) continue;
+                texture.name = atlas.mainTexture.name;
+                atlas.mainTexture = texture;
             }
         }
+    }
+
+    private static void GetCinematics()
+    {
+        var activePack = GetActiveTexturePack();
+        if (activePack == null) return;
+        var cinemaDir = Path.Combine(activePack, "Cinematics");
+        if (!Directory.Exists(cinemaDir)) return;
+        var files = Directory.GetFiles(cinemaDir)
+            .Select(Path.GetFileNameWithoutExtension)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var player in Resources.FindObjectsOfTypeAll<CinematicPlayer>())
+        {
+            if (player?.VideoClip == null) continue;
+            var clipName = Path.GetFileNameWithoutExtension(player.VideoClip.VideoFileName);
+            _instance.Logger.LogInfo($"Clipname : {clipName}");
+            if (files.Contains(clipName))
+            {
+                _instance.Logger.LogInfo($"Match: {clipName}");
+            }
+        }
+
+        foreach (var sequence in Resources.FindObjectsOfTypeAll<CinematicSequence>())
+        {
+            if (sequence?.VideoReference == null) continue;
+            var clipName = Path.GetFileNameWithoutExtension(sequence.VideoReference.VideoFileName);
+            _instance.Logger.LogInfo($"Sequence Clipname : {clipName}");
+            if (!files.Contains(clipName)) continue;
+            _instance.Logger.LogInfo($"Match Sequence : {clipName}");
+            sequence.unityVideoPlayer.source = VideoSource.Url;
+            sequence.unityVideoPlayer.url = Path.Combine(cinemaDir, sequence.VideoReference.VideoFileName);
+        }
+    }
+
+    private static string? GetActiveTexturePack()
+    {
+        return (from output in Directory.GetDirectories(ModDir) let infoPath = Path.Combine(output, "active.txt") where File.Exists(infoPath) select output).FirstOrDefault();
     }
 
 private static void OnSceneLoaded(Scene scene, LoadSceneMode mode)
@@ -68,7 +123,7 @@ private static void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         SceneManager.sceneLoaded -= OnSceneLoaded;
     }
 
-    private void InitializeMod()
+    private static void InitializeMod()
     {
         if (!Directory.Exists(ModDir))
         {
