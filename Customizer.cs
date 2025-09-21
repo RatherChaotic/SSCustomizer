@@ -19,29 +19,48 @@ public class Customizer : BaseUnityPlugin
     private static Customizer _instance = null!;
     private static readonly string ModDir = Path.Combine(Application.dataPath, "Mods", "Customizer");
     private static readonly List<tk2dSpriteCollectionData> LoadedCollectionsList = [];
-
+    
     [HarmonyPatch(typeof(VideoPlayer), "Play")]
     private class VideoPlayerPlayPatch
     {
         static void Prefix(VideoPlayer __instance)
         {
-            _instance.Logger.LogInfo(__instance.clip.name);
-            var activePack = GetActiveTexturePack();
-            if (activePack == null) return;
-            var cinemaDir = Path.Combine(activePack, "Cinematics");
-            if (!Directory.Exists(cinemaDir)) return;
-            var files = Directory.GetFiles(cinemaDir)
-                .Select(Path.GetFileNameWithoutExtension)
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var clipName = Path.GetFileNameWithoutExtension(__instance.clip.name);
-            if (!files.Contains(clipName)) return;
-            _instance.Logger.LogInfo("Found clip :)");
-            _instance.Logger.LogInfo($"Target Clip at : {Path.Combine(cinemaDir, __instance.clip.name + ".mp4")}");
-            __instance.source = VideoSource.Url;
-            __instance.url = Path.Combine(cinemaDir, __instance.clip.name + ".mp4");
-            _instance.Logger.LogInfo($"Patched VideoPlayer: {__instance.url}");
+            try
+            {
+                var activePack = GetActiveTexturePack();
+                if (activePack == null) return;
+                var cinemaDir = Path.Combine(activePack, "Cinematics");
+                if (!Directory.Exists(cinemaDir)) return;
+
+                string clipName;
+                if (__instance.clip != null)
+                    clipName = Path.GetFileNameWithoutExtension(__instance.clip.name);
+                else if (!string.IsNullOrEmpty(__instance.url))
+                    clipName = Path.GetFileNameWithoutExtension(__instance.url);
+                else
+                    return;
+
+                var customFilePath = Path.Combine(cinemaDir, clipName + ".mp4");
+                if (!File.Exists(customFilePath)) return;
+
+                // Unity VideoPlayer on Windows expects a file URI and forward slashes
+                var fileUrl = "file:///" + customFilePath.Replace('\\', '/');
+
+                if (__instance.source == VideoSource.Url && string.Equals(__instance.url, fileUrl, StringComparison.OrdinalIgnoreCase))
+                    return;
+
+                __instance.source = VideoSource.Url;
+                __instance.url = fileUrl;
+                __instance.clip = null; // avoid clip/source conflicts
+            }
+            catch (Exception ex)
+            {
+                _instance?.Logger.LogError($"Video patch error: {ex}");
+            }
         }
     }
+
+
 
     private static void UpdateLoadedAssets()
     {
@@ -137,7 +156,6 @@ private static void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     private void Awake()
     {
         _instance = this;
-        //_instance.Logger.LogInfo("Customizer Loaded : DEBUG");
         InitializeMod();
         var harmony = new Harmony(PluginInfo.PLUGIN_GUID);
         harmony.PatchAll();
