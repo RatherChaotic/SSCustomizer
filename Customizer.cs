@@ -29,8 +29,12 @@ public class Customizer : BaseUnityPlugin
     private static void GetTexturePacks(List<tk2dSpriteCollectionData> collections)
     {
         var collectionDict = collections.ToDictionary(c => c.name, c => c);
-
-        foreach (var output in Directory.GetDirectories(ModDir))
+        List<string> customizerDirectories = Directory.GetDirectories(BepInEx.Paths.PluginPath, "Customizer", SearchOption.AllDirectories).ToList(); //find all mods which contain folder called "Customizer"
+        if (Directory.Exists(ModDir)) 
+        {
+            customizerDirectories.AddRange(Directory.GetDirectories(ModDir)); //keep support for all those on Nexus or manual installs
+        }
+        foreach (var output in customizerDirectories)
         {
             var infoPath = Path.Combine(output, "active.txt");
             if (!File.Exists(infoPath)) continue;
@@ -66,20 +70,9 @@ public class Customizer : BaseUnityPlugin
         SceneManager.sceneLoaded -= OnSceneLoaded;
     }
 
-    private void InitializeMod()
-    {
-        if (!Directory.Exists(ModDir))
-        {
-            Directory.CreateDirectory(ModDir);
-        }
-
-        
-    }
-
     private void Awake()
     {
         _instance = this;
-        InitializeMod();
         Logger.LogInfo($"Plugin {PluginInfo.PLUGIN_GUID} has loaded!");
         var harmony = new Harmony(PluginInfo.PLUGIN_GUID);
         harmony.PatchAll();
